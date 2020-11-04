@@ -1,0 +1,54 @@
+name: Python CI
+
+on: push
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      max-parallel: 1
+      matrix:
+        os: [ubuntu-latest]
+        python-version: [3.9.0]
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Get pip cache dir
+        id: pip-cache
+        run: |
+          echo "::set-output name=dir::$(pip cache dir)"
+      - name: Setup pip cache
+        uses: actions/cache@v2
+        with:
+          path: ${{ steps.pip-cache.outputs.dir }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Apply formatter and linter to check code quality
+        run: |
+          isort .
+          black .
+          flake8 .
+          git diff --quiet
+      - name: Run unit test with pytest
+        run: |
+          export PYTHONPATH=`pwd`:$PYTHONPATH
+          coverage run
+          coverage report
+          coverage xml
+      - name: Run SonarCloud analysis
+        uses: SonarSource/sonarcloud-github-action@v1.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
